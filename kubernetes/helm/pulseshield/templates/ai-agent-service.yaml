@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.aiAgentService.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: {{ .Values.aiAgentService.name }}
+spec:
+  replicas: {{ .Values.aiAgentService.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.aiAgentService.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.aiAgentService.name }}
+    spec:
+      serviceAccountName: ai-agent-sa
+      containers:
+      - name: {{ .Values.aiAgentService.name }}
+        image: {{ .Values.global.registry }}/{{ .Values.aiAgentService.image }}:{{ .Values.aiAgentService.tag }}
+        ports:
+        - containerPort: {{ .Values.aiAgentService.port }}
+        env:
+        - name: PORT
+          value: "{{ .Values.aiAgentService.port }}"
+        - name: PROMETHEUS_URL
+          value: {{ .Values.prometheus.url }}
+        - name: DB_HOST
+          value: {{ .Values.database.host }}
+        - name: DB_NAME
+          value: {{ .Values.database.name }}
+        - name: DB_USER
+          value: {{ .Values.database.user }}
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pulseshield-secrets
+              key: db-password
+        - name: CLAUDE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: pulseshield-secrets
+              key: claude-api-key
+        - name: SLACK_WEBHOOK_URL
+          valueFrom:
+            secretKeyRef:
+              name: pulseshield-secrets
+              key: slack-webhook-url
+        resources:
+          requests:
+            cpu: {{ .Values.aiAgentService.resources.requests.cpu }}
+            memory: {{ .Values.aiAgentService.resources.requests.memory }}
+          limits:
+            cpu: {{ .Values.aiAgentService.resources.limits.cpu }}
+            memory: {{ .Values.aiAgentService.resources.limits.memory }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.aiAgentService.port }}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.aiAgentService.name }}
+  namespace: {{ .Values.global.namespace }}
+spec:
+  selector:
+    app: {{ .Values.aiAgentService.name }}
+  ports:
+  - port: {{ .Values.aiAgentService.port }}
+    targetPort: {{ .Values.aiAgentService.port }}
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai-agent-sa
+  namespace: {{ .Values.global.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ai-agent-role
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments", "deployments/scale"]
+  verbs: ["get", "list", "patch", "update"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-agent-binding
+subjects:
+- kind: ServiceAccount
+  name: ai-agent-sa
+  namespace: {{ .Values.global.namespace }}
+roleRef:
+  kind: ClusterRole
+  name: ai-agent-role
+  apiGroup: rbac.authorization.k8s.io

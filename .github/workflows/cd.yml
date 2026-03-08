@@ -1,0 +1,80 @@
+name: CD Pipeline
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  EKS_CLUSTER: pulseshield-eks
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [order-service, inventory-service, notify-service, ai-agent-service, api-gateway]
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        working-directory: ./services/${{ matrix.service }}
+        run: |
+          docker build -t $ECR_REGISTRY/pulseshield/${{ matrix.service }}:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/pulseshield/${{ matrix.service }}:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/pulseshield/${{ matrix.service }}:$IMAGE_TAG $ECR_REGISTRY/pulseshield/${{ matrix.service }}:latest
+          docker push $ECR_REGISTRY/pulseshield/${{ matrix.service }}:latest
+  
+  helm-deploy:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
+      
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.12.0'
+      
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install pulseshield ./kubernetes/helm/pulseshield \
+            --namespace pulseshield \
+            --create-namespace \
+            --set global.registry=${{ secrets.ECR_REGISTRY }} \
+            --set orderService.tag=${{ github.sha }} \
+            --set inventoryService.tag=${{ github.sha }} \
+            --set notifyService.tag=${{ github.sha }} \
+            --set aiAgentService.tag=${{ github.sha }} \
+            --set apiGateway.tag=${{ github.sha }} \
+            --wait
+      
+      - name: Check rollout status
+        run: |
+          kubectl rollout status deployment/order-service -n pulseshield
+          kubectl rollout status deployment/inventory-service -n pulseshield
+          kubectl rollout status deployment/ai-agent-service -n pulseshield
