@@ -1,0 +1,6 @@
+apiVersion: v2
+name: pulseshield
+description: AI-Powered Microservices Health Monitoring Platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

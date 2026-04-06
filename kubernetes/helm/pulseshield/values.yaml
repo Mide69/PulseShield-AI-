@@ -1,0 +1,87 @@
+global:
+  registry: <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
+  namespace: pulseshield
+
+orderService:
+  name: order-service
+  image: pulseshield/order-service
+  tag: latest
+  replicas: 2
+  port: 3000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+inventoryService:
+  name: inventory-service
+  image: pulseshield/inventory-service
+  tag: latest
+  replicas: 2
+  port: 8000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+notifyService:
+  name: notify-service
+  image: pulseshield/notify-service
+  tag: latest
+  replicas: 2
+  port: 3001
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+aiAgentService:
+  name: ai-agent-service
+  image: pulseshield/ai-agent-service
+  tag: latest
+  replicas: 1
+  port: 8001
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+apiGateway:
+  name: api-gateway
+  image: pulseshield/api-gateway
+  tag: latest
+  replicas: 2
+  port: 80
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+database:
+  host: <RDS_ENDPOINT>
+  name: pulseshield
+  user: postgres
+
+prometheus:
+  url: http://prometheus-server.pulseshield.svc.cluster.local:80
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPU: 70

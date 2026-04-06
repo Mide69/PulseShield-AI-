@@ -1,0 +1,5 @@
+aws_region        = "us-east-1"
+cluster_name      = "pulseshield-eks"
+db_password       = "your-secure-password"
+claude_api_key    = "your-claude-api-key"
+slack_webhook_url = "your-slack-webhook-url"
